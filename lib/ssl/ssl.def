@@ -208,6 +208,8 @@ SSL_ConfigServerCert;
 ;+};
 ;+NSS_3.27 {    # NSS 3.27 release
 ;+    global:
+SSL_AlertReceivedCallback;
+SSL_AlertSentCallback;
 SSL_NamedGroupConfig;
 ;+    local:
 ;+*;
