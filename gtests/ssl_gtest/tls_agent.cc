@@ -60,6 +60,14 @@ TlsAgent::TlsAgent(const std::string& name, Role role, Mode mode)
       can_falsestart_hook_called_(false),
       sni_hook_called_(false),
       auth_certificate_hook_called_(false),
+      alert_received_count_(0),
+      last_alert_received_(NULL),
+      last_alert_level_received_(0),
+      last_alert_description_received_(0),
+      alert_sent_count_(0),
+      last_alert_sent_(NULL),
+      last_alert_level_sent_(0),
+      last_alert_description_sent_(0),
       handshake_callback_called_(false),
       error_code_(0),
       send_ctr_(0),
@@ -172,6 +180,14 @@ bool TlsAgent::EnsureTlsSetup(PRFileDesc* modelSocket) {
   }
 
   rv = SSL_AuthCertificateHook(ssl_fd(), AuthCertificateHook, this);
+  EXPECT_EQ(SECSuccess, rv);
+  if (rv != SECSuccess) return false;
+
+  rv = SSL_AlertReceivedCallback(ssl_fd(), AlertReceivedCallback, this);
+  EXPECT_EQ(SECSuccess, rv);
+  if (rv != SECSuccess) return false;
+
+  rv = SSL_AlertSentCallback(ssl_fd(), AlertSentCallback, this);
   EXPECT_EQ(SECSuccess, rv);
   if (rv != SECSuccess) return false;
 

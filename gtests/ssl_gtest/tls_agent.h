@@ -244,6 +244,40 @@ class TlsAgent : public PollTarget {
     sni_callback_ = sni_callback;
   }
 
+  size_t AlertReceivedCount() const { return alert_received_count_; }
+
+  bool GetLastAlertReceived(SSLAlert *alert) const {
+
+      if (alert == NULL || last_alert_received_ == NULL || alert_received_count_ == 0) {
+          return false;
+      }
+
+      alert->level = last_alert_received_->level;
+      alert->description = last_alert_received_->description;
+
+      return true;
+  }
+
+  SSLAlertLevel LastAlertLevelReceived() const { return last_alert_level_received_; }
+  SSLAlertDescription LastAlertDescriptionReceived() const { return last_alert_description_received_; }
+
+  size_t AlertSentCount() const { return alert_sent_count_; }
+
+  bool GetLastAlertSent(SSLAlert *alert) const {
+
+      if (alert == NULL || last_alert_sent_ == NULL || alert_sent_count_ == 0) {
+          return false;
+      }
+
+      alert->level = last_alert_sent_->level;
+      alert->description = last_alert_sent_->description;
+
+      return true;
+  }
+
+  SSLAlertLevel LastAlertLevelSent() const { return last_alert_level_sent_; }
+  SSLAlertDescription LastAlertDescriptionSent() const { return last_alert_description_sent_; }
+
  private:
   const static char* states[];
 
@@ -325,6 +359,28 @@ class TlsAgent : public PollTarget {
     return SECSuccess;
   }
 
+  static void AlertReceivedCallback(const PRFileDesc* fd, void* arg, const SSLAlert *alert) {
+    TlsAgent* agent = reinterpret_cast<TlsAgent*>(arg);
+
+    fprintf(stderr, "%s: Alert received: level=%d desc=%d\n",
+            agent->role_str().c_str(), alert->level, alert->description);
+    agent->alert_received_count_++;
+    agent->last_alert_received_ = const_cast<SSLAlert*>(alert);
+    agent->last_alert_level_received_ = alert->level;
+    agent->last_alert_description_received_ = alert->description;
+  }
+
+  static void AlertSentCallback(const PRFileDesc* fd, void* arg, const SSLAlert *alert) {
+    TlsAgent* agent = reinterpret_cast<TlsAgent*>(arg);
+
+    fprintf(stderr, "%s: Alert sent: level=%d desc=%d\n",
+            agent->role_str().c_str(), alert->level, alert->description);
+    agent->alert_sent_count_++;
+    agent->last_alert_sent_ = const_cast<SSLAlert*>(alert);
+    agent->last_alert_level_sent_ = alert->level;
+    agent->last_alert_description_sent_ = alert->description;
+  }
+
   static void HandshakeCallback(PRFileDesc* fd, void* arg) {
     TlsAgent* agent = reinterpret_cast<TlsAgent*>(arg);
     agent->handshake_callback_called_ = true;
@@ -356,6 +412,14 @@ class TlsAgent : public PollTarget {
   bool can_falsestart_hook_called_;
   bool sni_hook_called_;
   bool auth_certificate_hook_called_;
+  size_t alert_received_count_;
+  SSLAlert *last_alert_received_;
+  SSLAlertLevel last_alert_level_received_;
+  SSLAlertDescription last_alert_description_received_;
+  size_t alert_sent_count_;
+  SSLAlert *last_alert_sent_;
+  SSLAlertLevel last_alert_level_sent_;
+  SSLAlertDescription last_alert_description_sent_;
   bool handshake_callback_called_;
   SSLChannelInfo info_;
   SSLCipherSuiteInfo csinfo_;

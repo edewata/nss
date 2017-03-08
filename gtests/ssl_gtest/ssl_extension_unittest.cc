@@ -172,18 +172,49 @@ class TlsExtensionTestBase : public TlsConnectTestBase {
     server_->SetPacketFilter(alert_recorder);
     client_->SetPacketFilter(filter);
     ConnectExpectFail();
+
     EXPECT_EQ(kTlsAlertFatal, alert_recorder->level());
     EXPECT_EQ(alert, alert_recorder->description());
+
+    EXPECT_EQ(0U, server_->AlertReceivedCount());
+
+    EXPECT_EQ(1U, server_->AlertSentCount());
+    EXPECT_EQ(kTlsAlertFatal, server_->LastAlertLevelSent());
+    EXPECT_EQ(alert, server_->LastAlertDescriptionSent());
+
+    EXPECT_EQ(1U, client_->AlertReceivedCount());
+    EXPECT_EQ(kTlsAlertFatal, client_->LastAlertLevelReceived());
+    EXPECT_EQ(alert, client_->LastAlertDescriptionReceived());
+
+    EXPECT_EQ(0U, client_->AlertSentCount());
   }
 
   void ServerHelloErrorTest(std::shared_ptr<PacketFilter> filter,
                             uint8_t alert = kTlsAlertDecodeError) {
+    SSLAlert alertSent;
+    SSLAlert alertReceived;
+
     auto alert_recorder = std::make_shared<TlsAlertRecorder>();
     client_->SetPacketFilter(alert_recorder);
     server_->SetPacketFilter(filter);
     ConnectExpectFail();
+
     EXPECT_EQ(kTlsAlertFatal, alert_recorder->level());
     EXPECT_EQ(alert, alert_recorder->description());
+
+    EXPECT_EQ(0U, client_->AlertReceivedCount());
+
+    EXPECT_EQ(1U, client_->AlertSentCount());
+    EXPECT_TRUE(client_->GetLastAlertSent(&alertSent));
+    EXPECT_EQ(kTlsAlertFatal, alertSent.level);
+    EXPECT_EQ(alert, alertSent.description);
+
+    EXPECT_EQ(1U, server_->AlertReceivedCount());
+    EXPECT_TRUE(server_->GetLastAlertReceived(&alertReceived));
+    EXPECT_EQ(kTlsAlertFatal, alertReceived.level);
+    EXPECT_EQ(alert, alertReceived.description);
+
+    EXPECT_EQ(0U, server_->AlertSentCount());
   }
 
   static void InitSimpleSni(DataBuffer* extension) {
