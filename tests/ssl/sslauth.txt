@@ -12,6 +12,7 @@
   noECC     0       -r           -V_ssl3:tls1.2_-w_bogus_-n_TestUser     TLS Request don't require client auth (bad password)
   noECC     0       -r           -V_ssl3:tls1.2_-w_nss_-n_TestUser       TLS Request don't require client auth (client auth)
   noECC    254      -r_-r        -V_ssl3:tls1.2_-w_nss_-n_none           TLS Require client auth (client does not provide auth)
+  noECC    254      -r_-r        -V_ssl3:tls1.2_-w_nss_-n_none_--check-bad-certificate TLS Require client auth (client does not provide auth) and check bad cert alert
   noECC    254      -r_-r        -V_ssl3:tls1.2_-w_bogus_-n_TestUser     TLS Require client auth (bad password)
   noECC     0       -r_-r        -V_ssl3:tls1.2_-w_nss_-n_TestUser_      TLS Require client auth (client auth)
   noECC     0       -r           -V_ssl3:ssl3_-w_nss_-n_none        SSL3 Request don't require client auth (client does not provide auth)

@@ -103,6 +103,14 @@ secuPWData pwdata = { PW_NONE, 0 };
 SSLNamedGroup *enabledGroups = NULL;
 unsigned int enabledGroupsCount = 0;
 
+int alertsReceived;
+SSLAlertLevel lastAlertLevelReceived;
+SSLAlertDescription lastAlertDescriptionReceived;
+
+int alertsSent;
+SSLAlertLevel lastAlertLevelSent;
+SSLAlertDescription lastAlertDescriptionSent;
+
 void
 printSecurityInfo(PRFileDesc *fd)
 {
@@ -192,7 +200,7 @@ PrintUsageHeader(const char *progName)
             "[-n nickname] [-Bafosvx] [-c ciphers] [-Y] [-Z]\n"
             "[-V [min-version]:[max-version]] [-K] [-T] [-U]\n"
             "[-r N] [-w passwd] [-W pwfile] [-q [-t seconds]] [-I groups]\n"
-            "[-A requestfile] [-L totalconnections]",
+            "[-A requestfile] [-L totalconnections] [--check-bad-certificate]",
             progName);
 }
 
@@ -266,6 +274,7 @@ PrintParameterUsage(void)
                     "%-20s The following values are valid:\n"
                     "%-20s P256, P384, P521, x25519, FF2048, FF3072, FF4096, FF6144, FF8192\n",
             "-I", "", "");
+    fprintf(stderr, "%-20s Check bad certificate alert.\n", "--check-bad-certificate");
 }
 
 static void
@@ -347,6 +356,30 @@ typedef struct
     PRBool allowOCSPSideChannelData;
     PRBool allowCRLSideChannelData;
 } ServerCertAuth;
+
+/*
+ * Callback is called when an alert is received.
+ */
+static void
+ownAlertReceivedCallback(const PRFileDesc *fd, void *arg, SSLAlertLevel level, SSLAlertDescription desc)
+{
+    fprintf(stderr, "tstclnt: alert received: level=%d desc=%d\n", level, desc);
+    alertsReceived++;
+    lastAlertLevelReceived = level;
+    lastAlertDescriptionReceived = desc;
+}
+
+/*
+ * Callback is called when an alert is sent.
+ */
+static void
+ownAlertSentCallback(const PRFileDesc *fd, void *arg, SSLAlertLevel level, SSLAlertDescription desc)
+{
+    fprintf(stderr, "tstclnt: alert sent: level=%d desc=%d\n", level, desc);
+    alertsSent++;
+    lastAlertLevelSent = level;
+    lastAlertDescriptionSent = desc;
+}
 
 /*
  * Callback is called when incoming certificate is not valid.
@@ -924,6 +957,7 @@ int override = 0;
 char *requestString = NULL;
 PRInt32 requestStringLen = 0;
 PRBool enableZeroRtt = PR_FALSE;
+PRBool checkBadCertificate = PR_FALSE;
 
 static int
 writeBytesToServer(PRFileDesc *s, PRPollDesc *pollset, const char *buf, int nb)
@@ -989,6 +1023,14 @@ run_client(void)
     PRPollDesc pollset[2];
     PRBool wrStarted = PR_FALSE;
     char *requestStringInt = requestString;
+
+    alertsReceived = 0;
+    lastAlertLevelReceived = 0;
+    lastAlertDescriptionReceived = 255; /* undefined */
+
+    alertsSent = 0;
+    lastAlertLevelSent = 0;
+    lastAlertDescriptionSent = 255; /* undefined */
 
     /* Create socket */
     s = PR_OpenTCPSocket(addr.raw.family);
@@ -1183,6 +1225,8 @@ run_client(void)
     serverCertAuth.dbHandle = CERT_GetDefaultCertDB();
 
     SSL_AuthCertificateHook(s, ownAuthCertificate, &serverCertAuth);
+    SSL_AlertReceivedCallback(s, ownAlertReceivedCallback, NULL);
+    SSL_AlertSentCallback(s, ownAlertSentCallback, NULL);
     if (override) {
         SSL_BadCertHook(s, ownBadCertHandler, NULL);
     }
@@ -1406,6 +1450,29 @@ done:
         PR_Close(s);
     }
 
+    if (checkBadCertificate) {
+
+        if (alertsReceived != 1) {
+            fprintf(stderr, "tstclnt: alerts received: %d, expected: %d\n", alertsReceived, 1);
+            return 1;
+        }
+
+        if (lastAlertLevelReceived != 2) { /* fatal */
+            fprintf(stderr, "tstclnt: last alert received: %d, expected: %d\n", lastAlertLevelReceived, 2);
+            return 1;
+        }
+
+        if (lastAlertDescriptionReceived != 42) { /* bad_certificate */
+            fprintf(stderr, "tstclnt: last alert description received: %d, expected: %d\n", lastAlertDescriptionReceived, 42);
+            return 1;
+        }
+
+        if (alertsSent != 0) {
+            fprintf(stderr, "tstclnt: alerts sent: %d, expected: %d\n", alertsSent, 0);
+            return 1;
+        }
+    }
+
     return error;
 }
 
@@ -1446,6 +1513,7 @@ ReadFile(const char *filename, char **data)
 int
 main(int argc, char **argv)
 {
+    PLLongOpt longopts[2];
     PLOptState *optstate;
     PLOptStatus optstatus;
     PRStatus status;
@@ -1484,11 +1552,26 @@ main(int argc, char **argv)
 
     SSL_VersionRangeGetSupported(ssl_variant_stream, &enabledVersions);
 
+    longopts[0].longOptName = "check-bad-certificate";
+    longopts[0].longOption = 0;
+    longopts[0].valueRequired = PR_FALSE;
+
+    longopts[1].longOptName = NULL;
+
     /* XXX: 'B' was used in the past but removed in 3.28,
      *      please leave some time before resuing it. */
-    optstate = PL_CreateOptState(argc, argv,
-                                 "46A:CDFGHI:KL:M:OR:STUV:WYZa:bc:d:fgh:m:n:op:qr:st:uvw:z");
+    optstate = PL_CreateLongOptState(argc, argv,
+                                 "46A:CDFGHI:KL:M:OR:STUV:WYZa:bc:d:fgh:m:n:op:qr:st:uvw:z",
+                                 longopts);
     while ((optstatus = PL_GetNextOpt(optstate)) == PL_OPT_OK) {
+
+        /* long options */
+        if (optstate->longOptIndex == 0) {
+            checkBadCertificate = PR_TRUE;
+            continue;
+        }
+
+        /* short options */
         switch (optstate->option) {
             case '?':
             default:

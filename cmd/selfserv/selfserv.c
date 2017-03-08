@@ -423,6 +423,18 @@ printSecurityInfo(PRFileDesc *fd)
 
 static int MakeCertOK;
 
+static void
+myAlertReceivedCallback(const PRFileDesc *fd, void *arg, SSLAlertLevel level, SSLAlertDescription desc)
+{
+    fprintf(stderr, "selfserv: alert received: level=%d desc=%d\n", level, desc);
+}
+
+static void
+myAlertSentCallback(const PRFileDesc *fd, void *arg, SSLAlertLevel level, SSLAlertDescription desc)
+{
+    fprintf(stderr, "selfserv: alert sent: level=%d desc=%d\n", level, desc);
+}
+
 static SECStatus
 myBadCertHandler(void *arg, PRFileDesc *fd)
 {
@@ -2009,6 +2021,9 @@ server_main(
             }
         }
     }
+
+    SSL_AlertReceivedCallback(model_sock, myAlertReceivedCallback, NULL);
+    SSL_AlertSentCallback(model_sock, myAlertSentCallback, NULL);
 
     if (MakeCertOK)
         SSL_BadCertHook(model_sock, myBadCertHandler, NULL);
